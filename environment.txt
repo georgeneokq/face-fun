@@ -1,0 +1,8 @@
+Python version:
+3.6
+
+Required packages:
+numpy
+scipy
+dlib (install via whl file)
+opencv-python
