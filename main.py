@@ -21,7 +21,7 @@ fileStream = False
 
 alpha = 0.4
 confidence = 0.5
-drawDetectionInfo = True
+drawDetectionInfo = False
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
@@ -50,7 +50,7 @@ drawables = getDrawableNames()
 # Define two constants, one for the eye aspect ratio to indicate a blink
 # and a second constant for the number of consecutive frames
 # the eye must be below the threshold
-EYE_AR_THRESHOLD = 0.15
+EYE_AR_THRESHOLD = 0.16
 EYE_AR_CONSEC_FRAMES = 1
 
 # Initialize the frame counters and the total number of blinks
@@ -132,7 +132,15 @@ while True:
 		endX = rect.right()
 		endY = rect.bottom()
 		bounding_box = (startX, startY, endX, endY)
+		
+		# DEBUGGING
+		bounding_box_width = endX - startX
+		# END DEBUGGING
+		
 		(overlay, x, y) = get(drawables[drawableIndex], bounding_box)
+		if drawDetectionInfo:
+			cv2.putText(frame, "Face width: {}".format(bounding_box_width), (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+				0.7, (0, 255, 0), 2)
 		if x > 0 and y > 0:
 			frame = overlay_transparent(frame, overlay, x, y)
 

@@ -39,24 +39,53 @@ def getCenterX(drawableWidth, faceStartX, faceEndX):
     x = faceCenter - (drawableWidth / 2)
     return x
 
+def autoScale(dimension, faceWidth):
+    divide_ratio = 1.5
+    if len(scaling_breakpoints) == 0:
+        return dimension
+    elif len(scaling_breakpoints) == 1:
+        if faceWidth > scaling_breakpoints[0]:
+            return dimension
+        else:
+            dimension = dimension / divide_ratio
+            return dimension
+    else:
+        if faceWidth > scaling_breakpoints[0]:
+            return dimension
+
+        for i in range(0, len(scaling_breakpoints)):
+            if faceWidth < scaling_breakpoints[i]:
+                dimension = dimension / divide_ratio
+            else:
+                break
+
+        return dimension
+
 
 ################## DEFINE FUNCTIONS TO RETURN COORDINATES FOR EACH DRAWABLE ##################
 # Return (x, y, w, h) tuple, where x and y are top-left coordinates, w and h are dimensions of the image to be drawn
 
 # Draw miku on top of head!
 def miku(startX, startY, endX, endY, originalWidth, originalHeight):
+    # MAX height
     height = 200
+    faceWidth = endX - startX
+    height = autoScale(height, faceWidth)
+    # Break off points to scale down the image size
     width = rescale(height, originalHeight, originalWidth)
     x = getCenterX(width, startX, endX)
-    y = startY - height - 50
+    y = startY - height - (height / 4)
     return (x, y, width, height)
 
 # Draw hat on top of head
 def hat(startX, startY, endX, endY, originalWidth, originalHeight):
+    # MAX height
     height = 200
+    faceWidth = endX - startX
+    height = autoScale(height, faceWidth)
     width = rescale(height, originalHeight, originalWidth)
     x = getCenterX(width, startX, endX)
-    y = startY - height - 50
+    y = startY - height - (height / 4)
     return (x, y, width, height)
 
 # Draw surgical mask on bottom half of face 
@@ -82,3 +111,6 @@ drawables = {
         "func": mask
     }
 }
+
+# Scaling breakpoints in DESCENDING ORDER
+scaling_breakpoints = [150, 120, 90, 60]
