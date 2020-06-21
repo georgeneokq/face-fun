@@ -1,4 +1,5 @@
 from scipy.spatial import distance as dist
+import numpy as np
 
 # Function to overlay a PNG image with transparent background onto another background image
 # x and y defines the top left corner

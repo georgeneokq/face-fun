@@ -11,40 +11,73 @@ import time
 import cv2
 import dlib
 import imutils
+from playsound import playsound
+from threading import Timer
+import time
+import os
 
 from drawables import get
 from drawables import getDrawableNames
+from drawables import getCategoryNames
+from drawables import getByCategory
+from drawables import getCategoryItemCount
 from my_utils import overlay_transparent
 from my_utils import eye_aspect_ratio
 
+portrait_mode = False
+SCREEN_WIDTH = 1920
+SCREEN_HEIGHT = 1080
 fileStream = False
 
-alpha = 0.4
 confidence = 0.5
-drawDetectionInfo = False
+drawDetectionInfo = True
 
-# construct the argument parse and parse the arguments
+# construct the argument parse and parse the arguments if any
 ap = argparse.ArgumentParser()
-ap.add_argument("-p", "--prototxt", required=False,
-	help="path to Caffe 'deploy' prototxt file", default="models/face_detection/deploy.prototxt.txt")
-ap.add_argument("-m", "--model", required=False,
-	help="path to Caffe pre-trained model", default="models/face_detection/res10_300x300_ssd_iter_140000.caffemodel")
-ap.add_argument("-c", "--confidence", type=float, default=confidence,
-	help="minimum probability to filter weak detections")
-ap.add_argument("-s", "--shape-predictor", help="Path to facial landmark predictor",
-	default="models/facial_landmark_prediction/shape_predictor_68_face_landmarks.dat")
 ap.add_argument("-v", "--video", type=str, default="video/test.mp4",
 	help="Path to video file")
 args = vars(ap.parse_args())
 
 # Load detectors
 print("[INFO] loading model...")
-# net = cv2.dnn.readNetFromCaffe(args["prototxt"], args["model"])
+# net = cv2.dnn.readNetFromCaffe('models/face_detection/deploy.prototxt.txt, 'models/face_detection/res10_300x300_ssd_iter_140000.caffemodel')
 detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor(args["shape_predictor"])
+predictor = dlib.shape_predictor('models/facial_landmark_prediction/shape_predictor_68_face_landmarks.dat')
+
+# Create screenshots folders if not yet created
+screenshots_folder_name = 'screenshots'
+if not os.path.isdir(screenshots_folder_name):
+	os.mkdir(screenshots_folder_name)
+
 
 # Cache list of drawable names
 drawables = getDrawableNames()
+categories = getCategoryNames()
+current_category = categories[0]
+current_category_index = 0
+category_item_count = getCategoryItemCount(current_category)
+
+# Change drawable based on blink count
+drawableIndex = 0
+
+def nextCategory():
+	global current_category_index, current_category, category_item_count, drawableIndex
+	current_category_index += 1
+	if current_category_index >= len(categories):
+		current_category_index = 0
+	current_category = categories[current_category_index]
+	category_item_count = getCategoryItemCount(current_category)
+	drawableIndex = 0
+	
+
+def prevCategory():
+	global current_category_index, current_category, category_item_count, drawableIndex
+	current_category_index -= 1
+	if current_category_index < 0:
+		current_category_index = len(categories) - 1
+	current_category = categories[current_category_index]
+	category_item_count = getCategoryItemCount(current_category)
+	drawableIndex = 0
 
 # Variables for blink detection.
 # Define two constants, one for the eye aspect ratio to indicate a blink
@@ -57,9 +90,18 @@ EYE_AR_CONSEC_FRAMES = 1
 frame_counter = 0
 total_blinks = 0
 ear = 0
+currently_closed_eye = None # None, 'left', 'right', 'both'
 
-# Change drawable based on blink count
-drawableIndex = 0
+# For doing "screenshot" after a delay, saving camera frame to disk
+executing_screenshot = False
+screenshot_delay = 3 # In milliseconds
+screenshot_thread = None
+elapsed_time = 0
+
+def countdown():
+	global elapsed_time
+	if elapsed_time > 0:
+		elapsed_time -= 1
 
 # Indexes for facial landmarks for left and right eye respectively
 (lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
@@ -67,29 +109,53 @@ drawableIndex = 0
 
 # initialize the video stream and allow the cammera sensor to warmup
 print("[INFO] starting video stream...")
-
+leftEAR = 0
+rightEAR = 0
 if fileStream:
 	# Try video stream from file
 	vc = FileVideoStream(args["video"]).start()
 	time.sleep(1.0)
 else:
-	# vs = VideoStream(src=0).start()
 	vc = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 	# Forcing resolution increase leads to decrease in frame rate and quality loss
-	vc.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-	vc.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+	vc.set(cv2.CAP_PROP_FRAME_WIDTH, SCREEN_WIDTH)
+	vc.set(cv2.CAP_PROP_FRAME_HEIGHT, SCREEN_HEIGHT)
 	time.sleep(1.0)
 
+cv2.namedWindow('Blinker', cv2.WINDOW_FREERATIO)
+cv2.setWindowProperty('Blinker', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 # Video processing main loop
 while True:
 	if fileStream and not vc.more():
 		break
 	if fileStream:
-		frame = vc.read()
-		frame = imutils.resize(frame, width=1280, height=720)
+		ret, frame = vc.read()
 	else:
 		ret, frame = vc.read()
-		# frame = imutils.resize(frame, width=450)
+
+	# Get frame dimensions
+	orig = frame.copy()
+	(origH, origW) = frame.shape[:2]
+
+	# Draw the TP logo at bottom right corner of frame
+	tp_logo = cv2.imread('img/tplogo2.png', cv2.IMREAD_UNCHANGED)
+	tp_logo_height, tp_logo_width, channels = tp_logo.shape
+	width = origW
+	height = int(tp_logo_height * (width / tp_logo_width))
+	tp_logo = cv2.resize(tp_logo, (width, height))
+	orig = overlay_transparent(orig, tp_logo, origW - width, origH - height)
+
+	# Set new width and height then determine ratio in change (faster processing)
+	# newW = 1920 # resized frame height for processing
+	newW = 1280
+	# newW = 640
+	newH = int((newW / origW) * origH)
+	rW = origW / float(newW)
+	rH = origH / float(newH)
+
+	# Resize image and get new dimensions
+	frame = cv2.resize(frame, (newW, newH))
+	(H, W) = frame.shape[:2]
 
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -109,50 +175,127 @@ while True:
 		rightEAR = eye_aspect_ratio(rightEye)
 
 		# Average the eye aspect ratio together for both eyes
-		ear = (leftEAR + rightEAR) / 2			
+		bothEAR = (leftEAR + rightEAR) / 2
 
 		# Check if minimum number of consecutive frames has passed since EAR reached threshold
-		if ear < EYE_AR_THRESHOLD:
-			frame_counter += 1
+		if bothEAR < EYE_AR_THRESHOLD:
+			print('Left EAR: {:.4f}, Right EAR: {:.4f}'.format(leftEAR, rightEAR))
+			if currently_closed_eye is not 'both':
+				currently_closed_eye = 'both'
+				frame_counter = 1
+			else:
+				frame_counter += 1
+		elif leftEAR < EYE_AR_THRESHOLD:
+			if currently_closed_eye is not 'left':
+				currently_closed_eye = 'left'
+				frame_counter = 1
+			else:
+				frame_counter += 1
+		elif rightEAR < EYE_AR_THRESHOLD:
+			if currently_closed_eye is not 'right':
+				currently_closed_eye = 'right'
+				frame_counter = 1
+			else:
+				frame_counter += 1
 		else:
 			# A blink is detected here
 			if frame_counter >= EYE_AR_CONSEC_FRAMES:
 				total_blinks += 1
-				drawableIndex += 1
-				if drawableIndex >= len(drawables):
-					drawableIndex = 0
-			
+
+				if currently_closed_eye is 'right':
+					# Switch to next category
+					nextCategory()
+				elif currently_closed_eye is 'left':
+					# Set flag to save current frame to disk after specified delay
+					executing_screenshot = True
+					elapsed_time = screenshot_delay
+
+					for i in range(1, screenshot_delay + 2):
+						Timer(i, countdown).start()
+
+				elif currently_closed_eye is 'both':
+					if drawableIndex + 1 >= category_item_count:
+						drawableIndex = 0
+					else:
+						drawableIndex += 1
+
+
 			# Reset counter
 			frame_counter = 0
+			currently_closed_eye = None
+
 
 		# Write drawable onto frame
 		# Convert rect to a tuple of (startX, startY, endX, endY) as required by drawables.py 'get' function
-		startX = rect.left()
-		startY = rect.top()
-		endX = rect.right()
-		endY = rect.bottom()
+		startX = int(rect.left() * rW)
+		startY = int(rect.top() * rH)
+		endX = int(rect.right() * rW)
+		endY = int(rect.bottom() * rH)
 		bounding_box = (startX, startY, endX, endY)
+		if drawDetectionInfo and not executing_screenshot:
+			cv2.putText(orig, "Left eye: {:.2f}".format(leftEAR), (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+				0.7, (0, 0, 255), 2)
+			cv2.putText(orig, "Right eye: {:.2f}".format(rightEAR), (250, 30), cv2.FONT_HERSHEY_SIMPLEX,
+					0.7, (0, 0, 255), 2)
+			cv2.putText(orig, "Closed eyes: {}".format(currently_closed_eye), (490, 30), cv2.FONT_HERSHEY_SIMPLEX,
+				0.7, (0, 0, 255), 2)
 		
 		# DEBUGGING
 		bounding_box_width = endX - startX
 		# END DEBUGGING
 		
-		(overlay, x, y) = get(drawables[drawableIndex], bounding_box)
-		if drawDetectionInfo:
-			cv2.putText(frame, "Face width: {}".format(bounding_box_width), (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+		(overlay, x, y) = getByCategory(current_category, drawableIndex, bounding_box, shape)
+
+		if drawDetectionInfo and not executing_screenshot and False:
+			cv2.putText(orig, "Face width: {}".format(bounding_box_width), (x, y), cv2.FONT_HERSHEY_SIMPLEX,
 				0.7, (0, 255, 0), 2)
 		if x > 0 and y > 0:
-			frame = overlay_transparent(frame, overlay, x, y)
+			orig = overlay_transparent(orig, overlay, x, y)
 
-	# Display number of blinks
-	if drawDetectionInfo:
-		cv2.putText(frame, "Blinks: {}".format(total_blinks), (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-			0.7, (0, 0, 255), 2)
-		cv2.putText(frame, "EAR: {}".format(ear), (300, 30), cv2.FONT_HERSHEY_SIMPLEX,
-				0.7, (0, 0, 255), 2)
+	# Draw categories and highlight current category on the top-right corner of screen
+	list_top_y = 10
+	list_item_padding = 10
+	for category in categories:
+		if executing_screenshot:
+			break
+		color = (0, 255, 0) # default color
+		# highlight color
+		if category is current_category:
+			color = (255, 50, 0)
+		text = category
+		font = cv2.FONT_HERSHEY_COMPLEX
+		font_scale = 0.7
+		font_thickness = 2
+		(text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
+		cv2.putText(orig, category, (origW - text_width, list_top_y + text_height + baseline), font, font_scale, color, font_thickness)
+		list_top_y += (text_height + baseline + list_item_padding)
+
+	# Rotate final frame to portrait
+	if portrait_mode:
+		orig = cv2.rotate(orig, cv2.ROTATE_90_CLOCKWISE)
+
+	if executing_screenshot:
+		# Show timer on the frame
+		if elapsed_time is not 0:
+			color = (0, 128, 255) # orange
+			text = str(elapsed_time)
+			font = cv2.FONT_HERSHEY_COMPLEX
+			font_scale = 2
+			font_thickness = 5
+			(text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
+			cv2.putText(orig, text, (int(origW / 2 - text_width / 2), int(origH / 2 - text_height / 2)), font, font_scale, color, font_thickness)
+		else:
+			file_name = str(time.time()) + '.png'
+			cv2.imwrite('{}/{}'.format(screenshots_folder_name, file_name), orig)
+			executing_screenshot = False
+			
+			# Indicate screenshot taken
+			playsound('sounds/camera-shutter-click.mp3')
+			cv2.imshow("Blinker", cv2.rectangle(orig, (0, 0), (origW, origH), (255, 255, 255), -1))
+		
 
 	# Show the output frame
-	cv2.imshow("Blink detection", frame)
+	cv2.imshow("Blinker", orig)
 
 	# If specified key is pressed while focus is on the window, end the loop
 	key = cv2.waitKey(1) & 0xFF
