@@ -15,6 +15,7 @@ from playsound import playsound
 from threading import Timer
 import time
 import os
+import math
 
 from drawables import get
 from drawables import getDrawableNames
@@ -23,10 +24,16 @@ from drawables import getByCategory
 from drawables import getCategoryItemCount
 from my_utils import overlay_transparent
 from my_utils import eye_aspect_ratio
+from my_utils import rotate_box
+from my_utils import law_of_cosines_three_known_sides
+from my_utils import default_EAR_threshold
+from scipy.spatial import distance as dist
 
 portrait_mode = False
-SCREEN_WIDTH = 1920
-SCREEN_HEIGHT = 1080
+SCREEN_WIDTH_LANDSCAPE = 1920
+SCREEN_HEIGHT_LANDSCAPE = 1080
+SCREEN_WIDTH_PORTRAIT = SCREEN_HEIGHT_LANDSCAPE
+SCREEN_HEIGHT_PORTRAIT = SCREEN_WIDTH_LANDSCAPE
 fileStream = False
 
 confidence = 0.5
@@ -83,7 +90,7 @@ def prevCategory():
 # Define two constants, one for the eye aspect ratio to indicate a blink
 # and a second constant for the number of consecutive frames
 # the eye must be below the threshold
-EYE_AR_THRESHOLD = 0.16
+EYE_AR_THRESHOLD = default_EAR_threshold
 EYE_AR_CONSEC_FRAMES = 1
 
 # Initialize the frame counters and the total number of blinks
@@ -118,8 +125,8 @@ if fileStream:
 else:
 	vc = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 	# Forcing resolution increase leads to decrease in frame rate and quality loss
-	vc.set(cv2.CAP_PROP_FRAME_WIDTH, SCREEN_WIDTH)
-	vc.set(cv2.CAP_PROP_FRAME_HEIGHT, SCREEN_HEIGHT)
+	vc.set(cv2.CAP_PROP_FRAME_WIDTH, SCREEN_WIDTH_LANDSCAPE)
+	vc.set(cv2.CAP_PROP_FRAME_HEIGHT, SCREEN_HEIGHT_LANDSCAPE)
 	time.sleep(1.0)
 
 cv2.namedWindow('Blinker', cv2.WINDOW_FREERATIO)
@@ -132,6 +139,8 @@ while True:
 		ret, frame = vc.read()
 	else:
 		ret, frame = vc.read()
+
+	# frame = cv2.flip(frame, 1) # Flip horizontally
 
 	# Get frame dimensions
 	orig = frame.copy()
@@ -245,10 +254,56 @@ while True:
 		# END DEBUGGING
 		
 		(overlay, x, y) = getByCategory(current_category, drawableIndex, bounding_box, shape)
+		width, height = overlay.shape[:2]
 
-		if drawDetectionInfo and not executing_screenshot and False:
-			cv2.putText(orig, "Face width: {}".format(bounding_box_width), (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+		# Calculate angle of head tilt using eye coordinates.
+		opposite = abs(leftEye[1][1] - rightEye[1][1])
+		adjacent = abs(leftEye[1][0] - rightEye[1][0])
+		angle = math.atan(opposite/adjacent) # radians
+		angle = math.degrees(angle) # degrees
+
+		if leftEye[1][1] < rightEye[1][1]:
+			angle = -angle
+
+		overlay = imutils.rotate_bound(overlay, angle)
+
+		# EXERIMENT BEGIN
+		(mouthStart, mouthEnd) = face_utils.FACIAL_LANDMARKS_IDXS["inner_mouth"]
+		mouth = shape[mouthStart:mouthEnd]
+
+		mouth_left_corner = mouth[0]
+		mouth_right_corner = mouth[4]
+		# for (i, (mX, mY)) in enumerate(mouth):
+		# 	color = (255, 0, 0)
+		# 	if i == 0 or i == 4:
+		# 		color = (0, 255, 0)
+		# 	cv2.circle(orig, (mX, mY), 3, color, -1)
+		mouth_bottom_center = mouth[6]
+		mouth_top_center = mouth[2]
+		# cv2.circle(orig, (mouth_left_corner[0], mouth_left_corner[1]), 3, (255, 0, 0), -1)
+		# cv2.circle(orig, (mouth_right_corner[0], mouth_left_corner[1]), 3, (0, 255, 0), -1)
+		# cv2.circle(orig, (mouth_bottom_center[0], mouth_bottom_center[1]), 3, (0, 0, 255), -1)
+
+		# Calculate length of three sides to get angle using law of cosines
+		top = abs(mouth_left_corner[0] - mouth_right_corner[0])
+		bottom_left_1 = dist.euclidean(mouth_left_corner, mouth_top_center)
+		bottom_right_1 = dist.euclidean(mouth_right_corner, mouth_top_center)
+		bottom_left_2 = dist.euclidean(mouth_left_corner, mouth_bottom_center)
+		bottom_right_2 = dist.euclidean(mouth_right_corner, mouth_bottom_center)
+
+		angle1 = law_of_cosines_three_known_sides(top, bottom_left_1, bottom_right_1)
+		angle2 = law_of_cosines_three_known_sides(top, bottom_left_2, bottom_right_2)
+		# EXPERIMENT END
+
+		# A smile is detected when either angle1 is > 7 (subtle smile) or angle2 > 25 (wide smile)
+
+		if drawDetectionInfo and not executing_screenshot and True:
+			cv2.putText(orig, "Smile angle (top): {}".format(angle1), (x, y), cv2.FONT_HERSHEY_SIMPLEX,
 				0.7, (0, 255, 0), 2)
+			cv2.putText(orig, "Smile angle (bottom): {}".format(angle2), (x, y + 50), cv2.FONT_HERSHEY_SIMPLEX,
+				0.7, (0, 255, 0), 2)
+			# cv2.putText(orig, "Angle: {}".format(angle), (x, y + 50), cv2.FONT_HERSHEY_SIMPLEX, 
+			# 		0.7, (0, 255, 0), 2)
 		if x > 0 and y > 0:
 			orig = overlay_transparent(orig, overlay, x, y)
 
@@ -301,7 +356,19 @@ while True:
 	key = cv2.waitKey(1) & 0xFF
 	if key == ord("q"):
 		break
-		
+	elif key == ord("p"):
+		portrait_mode = not portrait_mode
+		if portrait_mode:
+			w = SCREEN_WIDTH_PORTRAIT
+			h = SCREEN_HEIGHT_PORTRAIT
+		else:
+			w = SCREEN_WIDTH_LANDSCAPE
+			h = SCREEN_HEIGHT_LANDSCAPE
+
+		vc.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+		vc.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+	elif key == ord("i"):
+		drawDetectionInfo = not drawDetectionInfo
 
 # do a bit of cleanup
 vc.release()

@@ -1,5 +1,29 @@
 from scipy.spatial import distance as dist
 import numpy as np
+import math
+
+default_EAR_threshold = 0.16
+
+def rotate_box(bb, cx, cy, h, w):
+    new_bb = list(bb)
+    for i,coord in enumerate(bb):
+        # opencv calculates standard transformation matrix
+        M = cv2.getRotationMatrix2D((cx, cy), theta, 1.0)
+        # Grab  the rotation components of the matrix)
+        cos = np.abs(M[0, 0])
+        sin = np.abs(M[0, 1])
+        # compute the new bounding dimensions of the image
+        nW = int((h * sin) + (w * cos))
+        nH = int((h * cos) + (w * sin))
+        # adjust the rotation matrix to take into account translation
+        M[0, 2] += (nW / 2) - cx
+        M[1, 2] += (nH / 2) - cy
+        # Prepare the vector to be transformed
+        v = [coord[0],coord[1],1]
+        # Perform the actual rotation and return the image
+        calculated = np.dot(M,v)
+        new_bb[i] = (calculated[0],calculated[1])
+    return new_bb
 
 # Function to overlay a PNG image with transparent background onto another background image
 # x and y defines the top left corner
@@ -52,3 +76,7 @@ def eye_aspect_ratio(eye):
 	aspect_ratio = (A + B) / (2.0 * C)
 
 	return aspect_ratio
+
+
+def law_of_cosines_three_known_sides(directly_opposite_side, remaining_side_1, remaining_side_2):
+    return math.degrees(math.acos((remaining_side_2**2 - remaining_side_1**2 - directly_opposite_side**2)/(-2.0 * directly_opposite_side * remaining_side_1)))
