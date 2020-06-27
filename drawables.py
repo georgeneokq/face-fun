@@ -8,7 +8,6 @@ from my_utils import default_EAR_threshold
 # face_utils.FACIAL_LANDMARKS_IDXS contains:
 # mouth, inner_mouth, right_eyebrow, left_eyebrow, right_eye, left_eye, nose, jaw
 
-
 # The only function that should be called from external files!
 # Name is defined in the drawables variable
 # Regions should be a tuple with (startX, startY, endX, endY) of the face
@@ -177,31 +176,6 @@ def eyes(startX, startY, endX, endY, originalWidth, originalHeight, facialLandma
     return (x, y, width, height)
 
 
-def get_image_path_by_emotion2(facial_landmarks):
-    # Check smiling, frowning or neutral
-    (mouthStart, mouthEnd) = face_utils.FACIAL_LANDMARKS_IDXS["mouth"]
-    mouth = facial_landmarks[mouthStart:mouthEnd]
-    
-    mouth_left_corner_y = mouth[0][1]
-    mouth_right_corner_y = mouth[6][1]
-    mouth_top_center_y = mouth[3][1]
-    mouth_corners_average_y = (mouth_left_corner_y + mouth_right_corner_y) / 2
-
-    if mouth_left_corner_y < mouth_top_center_y or mouth_right_corner_y < mouth_top_center_y:
-        img_path = "img/happy1.png"
-        print("Smiling:")
-        print("Mouth left corner: {}".format(mouth_left_corner_y))
-        print("Mouth right corner: {}".format(mouth_right_corner_y))
-        print("Mouth center: {}".format(mouth_top_center_y))
-    else:
-        img_path = "img/frown.png"
-        print("Frowning:")
-        print("Mouth left corner: {}".format(mouth_left_corner_y))
-        print("Mouth right corner: {}".format(mouth_right_corner_y))
-        print("Mouth center: {}".format(mouth_top_center_y))
-
-    return img_path
-
 def get_image_path_by_emotion(facial_landmarks):
     # Check smiling, frowning or neutral
     (mouthStart, mouthEnd) = face_utils.FACIAL_LANDMARKS_IDXS["inner_mouth"]
@@ -243,7 +217,7 @@ def get_image_path_by_emotion(facial_landmarks):
 	# A smile is detected when either angle1 is > 7 (subtle smile) or angle2 > 25 (wide smile)
     if wide_smile and both_eyes_closed:
         return "img/emojis/both_eyes_closed_wide_smile.png"
-    elif wide_smile and no_eyes_closed:
+    elif wide_smile:
         return "img/emojis/eyes_open_wide_smile.png"
     elif subtle_smile and left_eye_closed:
         return "img/emojis/left_eye_wink_subtle_smile.png"
@@ -274,7 +248,41 @@ categorized_drawables = {
     "Emotion": [
         {
             "img": get_image_path_by_emotion,
-            "func": full_face_height
+            "func": top_of_head()
+        }
+    ],
+    "Animal Ears": [
+        {
+            "img": "img/animal_ears/animal_ears1.png",
+            "func": top_of_head(height=100)
+        },
+        {
+            "img": "img/animal_ears/animal_ears2.png",
+            "func": top_of_head(height=100)
+        },
+        {
+            "img": "img/animal_ears/animal_ears3.png",
+            "func": top_of_head(height=200)
+        },
+        {
+            "img": "img/animal_ears/animal_ears4.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears5.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears6.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears7.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears8.png",
+            "func": top_of_head(height=150)
         }
     ],
     "Eyewear": [
@@ -394,20 +402,6 @@ categorized_drawables = {
             "img": "img/anime/anime10.png",
             "func": top_of_head()
         },
-    ],
-    "Animal Ears": [
-        {
-            "img": "img/dog_ears.png",
-            "func": top_of_head(height=150)
-        },
-        {
-            "img": "img/car_ears.png",
-            "func": top_of_head(height=150)
-        },
-        {
-            "img": "img/bunny_ears_right_down.png",
-            "func": top_of_head()
-        }
     ]
 }
 

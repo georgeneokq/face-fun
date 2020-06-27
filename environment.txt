@@ -8,3 +8,5 @@ dlib (install via whl file)
 imutils
 opencv-python
 playsound
+python-dotenv
+Pillow

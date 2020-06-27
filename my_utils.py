@@ -1,6 +1,8 @@
 from scipy.spatial import distance as dist
 import numpy as np
 import math
+from PIL import ImageFont, ImageDraw, Image
+import cv2
 
 default_EAR_threshold = 0.16
 
@@ -76,6 +78,27 @@ def eye_aspect_ratio(eye):
 	aspect_ratio = (A + B) / (2.0 * C)
 
 	return aspect_ratio
+
+def draw_text(img, text, position, font, font_size, color, font_thickness=0):
+    image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    color = color[::-1] # BGR to RGB
+
+    # Pass image to PIL
+    pil_image = Image.fromarray(image)
+
+    draw = ImageDraw.Draw(pil_image, mode='RGB')
+    
+    font = ImageFont.truetype(font, font_size)
+
+    (x, y) = position
+
+    draw.text((x, y), text, font=font, fill=color, stroke_width=font_thickness)
+
+    processed = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+
+    return processed
+
 
 
 def law_of_cosines_three_known_sides(directly_opposite_side, remaining_side_1, remaining_side_2):

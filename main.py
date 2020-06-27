@@ -27,17 +27,27 @@ from my_utils import eye_aspect_ratio
 from my_utils import rotate_box
 from my_utils import law_of_cosines_three_known_sides
 from my_utils import default_EAR_threshold
+from my_utils import draw_text
 from scipy.spatial import distance as dist
+
+from dotenv import load_dotenv
+from Mailer import Mailer
+from os import getenv
+import threading
+from PIL import ImageFont
+
+load_dotenv()
 
 portrait_mode = False
 SCREEN_WIDTH_LANDSCAPE = 1920
 SCREEN_HEIGHT_LANDSCAPE = 1080
 SCREEN_WIDTH_PORTRAIT = SCREEN_HEIGHT_LANDSCAPE
 SCREEN_HEIGHT_PORTRAIT = SCREEN_WIDTH_LANDSCAPE
-fileStream = False
-
+file_stream = False
+default_font = 'fonts/arial.ttf'
 confidence = 0.5
-drawDetectionInfo = True
+draw_detection_info = True
+entering_email = False
 
 # construct the argument parse and parse the arguments if any
 ap = argparse.ArgumentParser()
@@ -56,6 +66,8 @@ screenshots_folder_name = 'screenshots'
 if not os.path.isdir(screenshots_folder_name):
 	os.mkdir(screenshots_folder_name)
 
+# Set up SMTP for sending screenshots by email
+mailer = Mailer(getenv("MAIL_ADDRESS"), getenv("MAIL_PW"))
 
 # Cache list of drawable names
 drawables = getDrawableNames()
@@ -90,7 +102,7 @@ def prevCategory():
 # Define two constants, one for the eye aspect ratio to indicate a blink
 # and a second constant for the number of consecutive frames
 # the eye must be below the threshold
-EYE_AR_THRESHOLD = default_EAR_threshold
+EYE_AR_THRESHOLD = default_EAR_threshold # Defined in my_utils.py
 EYE_AR_CONSEC_FRAMES = 1
 
 # Initialize the frame counters and the total number of blinks
@@ -114,11 +126,13 @@ def countdown():
 (lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
 (rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
+logo_height = 0
+
 # initialize the video stream and allow the cammera sensor to warmup
 print("[INFO] starting video stream...")
 leftEAR = 0
 rightEAR = 0
-if fileStream:
+if file_stream:
 	# Try video stream from file
 	vc = FileVideoStream(args["video"]).start()
 	time.sleep(1.0)
@@ -133,9 +147,9 @@ cv2.namedWindow('Blinker', cv2.WINDOW_FREERATIO)
 cv2.setWindowProperty('Blinker', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 # Video processing main loop
 while True:
-	if fileStream and not vc.more():
+	if file_stream and not vc.more():
 		break
-	if fileStream:
+	if file_stream:
 		ret, frame = vc.read()
 	else:
 		ret, frame = vc.read()
@@ -151,6 +165,7 @@ while True:
 	tp_logo_height, tp_logo_width, channels = tp_logo.shape
 	width = origW
 	height = int(tp_logo_height * (width / tp_logo_width))
+	logo_height = height
 	tp_logo = cv2.resize(tp_logo, (width, height))
 	orig = overlay_transparent(orig, tp_logo, origW - width, origH - height)
 
@@ -241,13 +256,13 @@ while True:
 		endX = int(rect.right() * rW)
 		endY = int(rect.bottom() * rH)
 		bounding_box = (startX, startY, endX, endY)
-		if drawDetectionInfo and not executing_screenshot:
-			cv2.putText(orig, "Left eye: {:.2f}".format(leftEAR), (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-				0.7, (0, 0, 255), 2)
-			cv2.putText(orig, "Right eye: {:.2f}".format(rightEAR), (250, 30), cv2.FONT_HERSHEY_SIMPLEX,
-					0.7, (0, 0, 255), 2)
-			cv2.putText(orig, "Closed eyes: {}".format(currently_closed_eye), (490, 30), cv2.FONT_HERSHEY_SIMPLEX,
-				0.7, (0, 0, 255), 2)
+		if draw_detection_info and not executing_screenshot:
+			orig = draw_text(orig, "Left eye: {:.2f}".format(leftEAR), (10, 30), default_font,
+				30, (0, 0, 255))
+			orig = draw_text(orig, "Right eye: {:.2f}".format(rightEAR), (250, 30), default_font,
+					30, (0, 0, 255))
+			orig = draw_text(orig, "Closed eyes: {}".format(currently_closed_eye), (490, 30), default_font,
+				30, (0, 0, 255))
 		
 		# DEBUGGING
 		bounding_box_width = endX - startX
@@ -259,15 +274,14 @@ while True:
 		# Calculate angle of head tilt using eye coordinates.
 		opposite = abs(leftEye[1][1] - rightEye[1][1])
 		adjacent = abs(leftEye[1][0] - rightEye[1][0])
-		angle = math.atan(opposite/adjacent) # radians
-		angle = math.degrees(angle) # degrees
+		angle_radians = math.atan(opposite/adjacent) # radians
+		angle = math.degrees(angle_radians) # degrees
 
 		if leftEye[1][1] < rightEye[1][1]:
 			angle = -angle
 
 		overlay = imutils.rotate_bound(overlay, angle)
 
-		# EXERIMENT BEGIN
 		(mouthStart, mouthEnd) = face_utils.FACIAL_LANDMARKS_IDXS["inner_mouth"]
 		mouth = shape[mouthStart:mouthEnd]
 
@@ -293,24 +307,22 @@ while True:
 
 		angle1 = law_of_cosines_three_known_sides(top, bottom_left_1, bottom_right_1)
 		angle2 = law_of_cosines_three_known_sides(top, bottom_left_2, bottom_right_2)
-		# EXPERIMENT END
 
 		# A smile is detected when either angle1 is > 7 (subtle smile) or angle2 > 25 (wide smile)
 
-		if drawDetectionInfo and not executing_screenshot and True:
-			cv2.putText(orig, "Smile angle (top): {}".format(angle1), (x, y), cv2.FONT_HERSHEY_SIMPLEX,
-				0.7, (0, 255, 0), 2)
-			cv2.putText(orig, "Smile angle (bottom): {}".format(angle2), (x, y + 50), cv2.FONT_HERSHEY_SIMPLEX,
-				0.7, (0, 255, 0), 2)
-			# cv2.putText(orig, "Angle: {}".format(angle), (x, y + 50), cv2.FONT_HERSHEY_SIMPLEX, 
-			# 		0.7, (0, 255, 0), 2)
+		if draw_detection_info and not executing_screenshot and True:
+			orig = draw_text(orig, "Smile angle (top): {}".format(angle1), (x, y), default_font,
+				30, (0, 255, 0))
+			orig = draw_text(orig, "Smile angle (bottom): {}".format(angle2), (x, y + 50), default_font,
+				30, (0, 255, 0))
+			# orig = draw_text(orig, "Angle: {}".format(angle), (x, y + 50), default_font, 
+			# 		30, (0, 255, 0))
 		if x > 0 and y > 0:
 			orig = overlay_transparent(orig, overlay, x, y)
 
 	# Draw categories and highlight current category on the top-right corner of screen
 	list_top_y = 10
-	list_item_padding = 10
-	for category in categories:
+	for i, category in enumerate(categories):
 		if executing_screenshot:
 			break
 		color = (0, 255, 0) # default color
@@ -318,12 +330,22 @@ while True:
 		if category is current_category:
 			color = (255, 50, 0)
 		text = category
-		font = cv2.FONT_HERSHEY_COMPLEX
-		font_scale = 0.7
-		font_thickness = 2
-		(text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
-		cv2.putText(orig, category, (origW - text_width, list_top_y + text_height + baseline), font, font_scale, color, font_thickness)
-		list_top_y += (text_height + baseline + list_item_padding)
+		font = default_font
+		font_size = 30
+		max_text_height = 40
+		x = 5
+		y = list_top_y
+		orig = draw_text(orig, category, (5, y), font, font_size, color)
+		list_top_y += max_text_height
+
+	# Show current email at bottom-left of screen if editing
+	if entering_email and not executing_screenshot:
+		color = (0, 128, 255)
+		font_size = 40
+		baseline = 10
+		indicator = 'Email >>'
+		orig = draw_text(orig, f'{indicator} {mailer.receiver_email}',
+		 (5, origH - logo_height - font_size - baseline), default_font, font_size, color)
 
 	# Rotate final frame to portrait
 	if portrait_mode:
@@ -334,19 +356,25 @@ while True:
 		if elapsed_time is not 0:
 			color = (0, 128, 255) # orange
 			text = str(elapsed_time)
-			font = cv2.FONT_HERSHEY_COMPLEX
-			font_scale = 2
-			font_thickness = 5
-			(text_width, text_height), baseline = cv2.getTextSize(text, font, font_scale, font_thickness)
-			cv2.putText(orig, text, (int(origW / 2 - text_width / 2), int(origH / 2 - text_height / 2)), font, font_scale, color, font_thickness)
+			font = default_font
+			font_size = 60
+			orig = draw_text(orig, text, (int(origW/2), (int(origH/2))), font, font_size, color)
 		else:
 			file_name = str(time.time()) + '.png'
-			cv2.imwrite('{}/{}'.format(screenshots_folder_name, file_name), orig)
+			file_path = '{}/{}'.format(screenshots_folder_name, file_name)
+			cv2.imwrite(file_path, orig)
 			executing_screenshot = False
 			
 			# Indicate screenshot taken
 			playsound('sounds/camera-shutter-click.mp3')
 			cv2.imshow("Blinker", cv2.rectangle(orig, (0, 0), (origW, origH), (255, 255, 255), -1))
+
+			# Send email to specified user
+			def wrapper():
+				if mailer.receiver_email is not '':
+					mailer.send("TP Blink n Wink", "Thank you for visiting TP's AI Corner!", [file_path])
+			thread = threading.Thread(target=wrapper)
+			thread.start()
 		
 
 	# Show the output frame
@@ -354,8 +382,22 @@ while True:
 
 	# If specified key is pressed while focus is on the window, end the loop
 	key = cv2.waitKey(1) & 0xFF
-	if key == ord("q"):
-		break
+
+	# Backspace is 8, Enter is 13, 255 is nothing
+	if entering_email:
+		# If the key is 255, it means no key is pressed
+		if key != 255:
+			# Press enter to confirm
+			if key == 13:
+				entering_email = False
+			# Backspace to remove last letter from string
+			elif key == 8:
+				mailer.receiver_email = mailer.receiver_email[:-1]
+			else:
+				char = chr(key)
+				mailer.receiver_email += char
+	elif key == ord("e"):
+		entering_email = True
 	elif key == ord("p"):
 		portrait_mode = not portrait_mode
 		if portrait_mode:
@@ -368,7 +410,9 @@ while True:
 		vc.set(cv2.CAP_PROP_FRAME_WIDTH, w)
 		vc.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
 	elif key == ord("i"):
-		drawDetectionInfo = not drawDetectionInfo
+		draw_detection_info = not draw_detection_info
+	elif key == ord("q"):
+		break # Exit program
 
 # do a bit of cleanup
 vc.release()
