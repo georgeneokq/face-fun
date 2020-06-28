@@ -3,9 +3,8 @@ Add more categories/images in drawable.py file.
 '''
 
 # import the necessary packages
-from imutils.video import VideoStream
+from my_modules.video import VideoStream # Originally from imutils. Needed to change Thread daemon mode to false, otherwise program cannot end.
 from imutils import face_utils
-from imutils.video import FileVideoStream
 import numpy as np
 import argparse
 import time
@@ -40,17 +39,10 @@ SCREEN_WIDTH_LANDSCAPE = 1920
 SCREEN_HEIGHT_LANDSCAPE = 1080
 SCREEN_WIDTH_PORTRAIT = SCREEN_HEIGHT_LANDSCAPE
 SCREEN_HEIGHT_PORTRAIT = SCREEN_WIDTH_LANDSCAPE
-file_stream = False
 default_font = 'fonts/arial.ttf'
 confidence = 0.5
 draw_detection_info = True
 entering_email = False
-
-# construct the argument parse and parse the arguments if any
-ap = argparse.ArgumentParser()
-ap.add_argument("-v", "--video", type=str, default="video/test.mp4",
-	help="Path to video file")
-args = vars(ap.parse_args())
 
 # Load detectors
 print("[INFO] loading model...")
@@ -62,6 +54,8 @@ predictor = dlib.shape_predictor('models/facial_landmark_prediction/shape_predic
 screenshots_folder_name = getenv('SCREENSHOTS_FOLDER')
 if not os.path.isdir(screenshots_folder_name):
 	os.mkdir(screenshots_folder_name)
+
+show_help = False
 
 # Set up SMTP for sending screenshots by email
 mailer = Mailer(getenv("MAIL_ADDRESS"), getenv("MAIL_PW"))
@@ -128,32 +122,23 @@ logo_height = 0
 print("[INFO] starting video stream...")
 leftEAR = 0
 rightEAR = 0
-if file_stream:
-	# Try video stream from file
-	vc = FileVideoStream(args["video"]).start()
-	time.sleep(1.0)
-else:
-	# vc = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-	vc = VideoStream(src=0, usePiCamera=int(getenv('USE_PI_CAMERA')) > 0, resolution=(SCREEN_WIDTH_LANDSCAPE, SCREEN_HEIGHT_LANDSCAPE))
+# vc = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+vc = VideoStream(src=0, usePiCamera=int(getenv('USE_PI_CAMERA')) > 0, resolution=(SCREEN_WIDTH_LANDSCAPE, SCREEN_HEIGHT_LANDSCAPE))
+# Forcing resolution increase leads to decrease in frame rate and quality loss
+# vc.stream.set(cv2.CAP_PROP_BACKEND, cv2.CAP_DSHOW)
+if int(getenv('USE_PI_CAMERA')) == 0:
 	stream = vc.stream.stream
-	# Forcing resolution increase leads to decrease in frame rate and quality loss
-	# vc.stream.set(cv2.CAP_PROP_BACKEND, cv2.CAP_DSHOW)
 	stream.open(0, cv2.CAP_DSHOW)
 	stream.set(cv2.CAP_PROP_FRAME_WIDTH, SCREEN_WIDTH_LANDSCAPE)
 	stream.set(cv2.CAP_PROP_FRAME_HEIGHT, SCREEN_HEIGHT_LANDSCAPE)
-	vc.start()
-	time.sleep(1.0)
+vc = vc.start()
+time.sleep(1.0)
 
 cv2.namedWindow('Blinker', cv2.WINDOW_FREERATIO)
 cv2.setWindowProperty('Blinker', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 # Video processing main loop
 while True:
-	if file_stream and not vc.more():
-		break
-	if file_stream:
-		frame = vc.read()
-	else:
-		frame = vc.read()
+	frame = vc.read()
 
 	# frame = cv2.flip(frame, 1) # Flip horizontally
 
@@ -374,6 +359,22 @@ while True:
 					mailer.send("TP Blink n Wink", "Thank you for visiting TP's AI Corner!", [file_path])
 			thread = threading.Thread(target=wrapper)
 			thread.start()
+
+	help_text = '''
+e: To input the email to send screenshots to. To exit input mode,
+   press ENTER key to confirm the email change.
+h: Toggle help screen
+i: Toggle display of extra information on the screen
+p: Toggle portrait mode (currently in progress)
+q: Exit the program
+'''
+
+	if show_help and not executing_screenshot:
+		font = default_font
+		font_size = 30
+		color = (0, 128, 255)
+		orig = cv2.rectangle(orig, (0, 0), (origW, origH), (0, 0, 0), -1)
+		orig = draw_text(orig, help_text, (10, 10), font, font_size, color)
 		
 
 	# Show the output frame
@@ -383,9 +384,11 @@ while True:
 	key = cv2.waitKey(1) & 0xFF
 
 	# This section of code operates based on key pressed.
-	# Please add to this list when adding new key. 
+	# Please add to this list when adding new key.
+	# Also add to help_text above.
 	# --- LIST OF HOTKEYS ---
 	# e: To input the email to send screenshots to. To exit input mode, press ENTER key to confirm the email change.
+	# h: Toggle help screen
 	# i: Toggle display of extra information on the screen
 	# p: Toggle portrait mode (currently in progress)
 	# q: Exit the program
@@ -418,9 +421,12 @@ while True:
 		vc.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
 	elif key == ord("i"):
 		draw_detection_info = not draw_detection_info
+	elif key == ord("h"):
+		show_help = not show_help
 	elif key == ord("q"):
 		break # Exit program
 
 # do a bit of cleanup
 cv2.destroyAllWindows()
 vc.stop()
+print('Exited program')
