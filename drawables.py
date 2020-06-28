@@ -1,3 +1,10 @@
+'''
+This file contains categories of images to be displayed.
+To add categories/images, add them to the 'categorized_drawables' list at the bottom of the file.
+
+'''
+
+
 import cv2
 from scipy.spatial import distance as dist
 from imutils import face_utils
@@ -11,26 +18,6 @@ from my_utils import default_EAR_threshold
 # The only function that should be called from external files!
 # Name is defined in the drawables variable
 # Regions should be a tuple with (startX, startY, endX, endY) of the face
-def get(name, regions):
-    (startX, startY, endX, endY) = regions
-    drawable = drawables[name]
-
-    # Read the image using imread
-    image = cv2.imread(drawable["img"], cv2.IMREAD_UNCHANGED)
-    (originalHeight, originalWidth, originalChannels) = image.shape
-
-    # Get the x y coordinates and image dimensions to be drawn on the frame
-    (x, y, w, h) = drawable["func"](startX, startY, endX, endY, originalWidth, originalHeight)
-    x = int(x)
-    y = int(y)
-    w = int(w)
-    h = int(h)
-
-    # Resize image to specified w and h
-    dimensions = (w, h)
-    image = cv2.resize(image, dimensions)
-
-    return (image, x, y)
 
 def getByCategory(category_name, index, regions, facial_landmarks):
     (startX, startY, endX, endY) = regions
@@ -60,10 +47,6 @@ def getByCategory(category_name, index, regions, facial_landmarks):
     image = cv2.resize(image, dimensions)
 
     return (image, x, y)
-
-
-def getDrawableNames():
-    return list(drawables.keys())
 
 
 def getCategory(category_name):
@@ -112,7 +95,7 @@ def autoScale(dimension, faceWidth):
         return dimension
 
 
-################## DEFINE FUNCTIONS TO RETURN COORDINATES FOR EACH DRAWABLE ##################
+################## DEFINE FUNCTIONS TO RETURN COORDINATES AND DIMENSIONS FOR EACH DRAWABLE ##################
 # Return (x, y, w, h) tuple, where x and y are top-left coordinates, w and h are dimensions of the image to be drawn
 
 def top_of_head(width=None, height=None, offset_from_face=0):
@@ -176,6 +159,8 @@ def eyes(startX, startY, endX, endY, originalWidth, originalHeight, facialLandma
     return (x, y, width, height)
 
 
+
+################## DEFINE FUNCTIONS TO RETURN IMAGE PATHS FOR EACH DRAWABLE ##################
 def get_image_path_by_emotion(facial_landmarks):
     # Check smiling, frowning or neutral
     (mouthStart, mouthEnd) = face_utils.FACIAL_LANDMARKS_IDXS["inner_mouth"]
@@ -229,21 +214,11 @@ def get_image_path_by_emotion(facial_landmarks):
 
 
 ######################### DATA AND CONFIG #########################
-drawables = {
-    "miku": {
-        "img": "img/miku.png",
-        "func": top_of_head()
-    },
-    "hat": {
-        "img": "img/hat.png",
-        "func": top_of_head()
-    },
-    "mask": {
-        "img": "img/n95_mask.png",
-        "func": bottom_half_of_face
-    }
-}
 
+# Scaling breakpoints in DESCENDING ORDER
+scaling_breakpoints = [150, 120, 90, 60]
+
+# Categories and images
 categorized_drawables = {
     "Emotion": [
         {
@@ -404,6 +379,3 @@ categorized_drawables = {
         },
     ]
 }
-
-# Scaling breakpoints in DESCENDING ORDER
-scaling_breakpoints = [150, 120, 90, 60]

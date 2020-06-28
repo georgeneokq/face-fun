@@ -1,5 +1,6 @@
-# USAGE
-# python detect_faces_video.py --prototxt deploy.prototxt.txt --model res10_300x300_ssd_iter_140000.caffemodel
+'''
+Add more categories/images in drawable.py file.
+'''
 
 # import the necessary packages
 from imutils.video import VideoStream
@@ -16,9 +17,6 @@ from threading import Timer
 import time
 import os
 import math
-
-from drawables import get
-from drawables import getDrawableNames
 from drawables import getCategoryNames
 from drawables import getByCategory
 from drawables import getCategoryItemCount
@@ -29,7 +27,6 @@ from my_utils import law_of_cosines_three_known_sides
 from my_utils import default_EAR_threshold
 from my_utils import draw_text
 from scipy.spatial import distance as dist
-
 from dotenv import load_dotenv
 from Mailer import Mailer
 from os import getenv
@@ -62,15 +59,14 @@ detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor('models/facial_landmark_prediction/shape_predictor_68_face_landmarks.dat')
 
 # Create screenshots folders if not yet created
-screenshots_folder_name = 'screenshots'
+screenshots_folder_name = getenv('SCREENSHOTS_FOLDER')
 if not os.path.isdir(screenshots_folder_name):
 	os.mkdir(screenshots_folder_name)
 
 # Set up SMTP for sending screenshots by email
 mailer = Mailer(getenv("MAIL_ADDRESS"), getenv("MAIL_PW"))
 
-# Cache list of drawable names
-drawables = getDrawableNames()
+# Cache list of drawables
 categories = getCategoryNames()
 current_category = categories[0]
 current_category_index = 0
@@ -113,7 +109,7 @@ currently_closed_eye = None # None, 'left', 'right', 'both'
 
 # For doing "screenshot" after a delay, saving camera frame to disk
 executing_screenshot = False
-screenshot_delay = 3 # In milliseconds
+screenshot_delay = 3 # In seconds
 screenshot_thread = None
 elapsed_time = 0
 
@@ -137,10 +133,15 @@ if file_stream:
 	vc = FileVideoStream(args["video"]).start()
 	time.sleep(1.0)
 else:
-	vc = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+	# vc = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+	vc = VideoStream(src=0, usePiCamera=int(getenv('USE_PI_CAMERA')) > 0, resolution=(SCREEN_WIDTH_LANDSCAPE, SCREEN_HEIGHT_LANDSCAPE))
+	stream = vc.stream.stream
 	# Forcing resolution increase leads to decrease in frame rate and quality loss
-	vc.set(cv2.CAP_PROP_FRAME_WIDTH, SCREEN_WIDTH_LANDSCAPE)
-	vc.set(cv2.CAP_PROP_FRAME_HEIGHT, SCREEN_HEIGHT_LANDSCAPE)
+	# vc.stream.set(cv2.CAP_PROP_BACKEND, cv2.CAP_DSHOW)
+	stream.open(0, cv2.CAP_DSHOW)
+	stream.set(cv2.CAP_PROP_FRAME_WIDTH, SCREEN_WIDTH_LANDSCAPE)
+	stream.set(cv2.CAP_PROP_FRAME_HEIGHT, SCREEN_HEIGHT_LANDSCAPE)
+	vc.start()
 	time.sleep(1.0)
 
 cv2.namedWindow('Blinker', cv2.WINDOW_FREERATIO)
@@ -150,9 +151,9 @@ while True:
 	if file_stream and not vc.more():
 		break
 	if file_stream:
-		ret, frame = vc.read()
+		frame = vc.read()
 	else:
-		ret, frame = vc.read()
+		frame = vc.read()
 
 	# frame = cv2.flip(frame, 1) # Flip horizontally
 
@@ -230,7 +231,7 @@ while True:
 					# Switch to next category
 					nextCategory()
 				elif currently_closed_eye is 'left':
-					# Set flag to save current frame to disk after specified delay
+					# Set flag to save frame to disk after specified delay
 					executing_screenshot = True
 					elapsed_time = screenshot_delay
 
@@ -282,41 +283,39 @@ while True:
 
 		overlay = imutils.rotate_bound(overlay, angle)
 
-		(mouthStart, mouthEnd) = face_utils.FACIAL_LANDMARKS_IDXS["inner_mouth"]
-		mouth = shape[mouthStart:mouthEnd]
+		# NOTE: This section is only for testing the smile angle, comment out this section during production.
+		# (mouthStart, mouthEnd) = face_utils.FACIAL_LANDMARKS_IDXS["inner_mouth"]
+		# mouth = shape[mouthStart:mouthEnd]
 
-		mouth_left_corner = mouth[0]
-		mouth_right_corner = mouth[4]
-		# for (i, (mX, mY)) in enumerate(mouth):
-		# 	color = (255, 0, 0)
-		# 	if i == 0 or i == 4:
-		# 		color = (0, 255, 0)
-		# 	cv2.circle(orig, (mX, mY), 3, color, -1)
-		mouth_bottom_center = mouth[6]
-		mouth_top_center = mouth[2]
-		# cv2.circle(orig, (mouth_left_corner[0], mouth_left_corner[1]), 3, (255, 0, 0), -1)
-		# cv2.circle(orig, (mouth_right_corner[0], mouth_left_corner[1]), 3, (0, 255, 0), -1)
-		# cv2.circle(orig, (mouth_bottom_center[0], mouth_bottom_center[1]), 3, (0, 0, 255), -1)
+		# mouth_left_corner = mouth[0]
+		# mouth_right_corner = mouth[4]
+		# # for (i, (mX, mY)) in enumerate(mouth):
+		# # 	color = (255, 0, 0)
+		# # 	if i == 0 or i == 4:
+		# # 		color = (0, 255, 0)
+		# # 	cv2.circle(orig, (mX, mY), 3, color, -1)
+		# mouth_bottom_center = mouth[6]
+		# mouth_top_center = mouth[2]
+		# # cv2.circle(orig, (mouth_left_corner[0], mouth_left_corner[1]), 3, (255, 0, 0), -1)
+		# # cv2.circle(orig, (mouth_right_corner[0], mouth_left_corner[1]), 3, (0, 255, 0), -1)
+		# # cv2.circle(orig, (mouth_bottom_center[0], mouth_bottom_center[1]), 3, (0, 0, 255), -1)
 
-		# Calculate length of three sides to get angle using law of cosines
-		top = abs(mouth_left_corner[0] - mouth_right_corner[0])
-		bottom_left_1 = dist.euclidean(mouth_left_corner, mouth_top_center)
-		bottom_right_1 = dist.euclidean(mouth_right_corner, mouth_top_center)
-		bottom_left_2 = dist.euclidean(mouth_left_corner, mouth_bottom_center)
-		bottom_right_2 = dist.euclidean(mouth_right_corner, mouth_bottom_center)
+		# # Calculate length of three sides to get angle using law of cosines
+		# top = abs(mouth_left_corner[0] - mouth_right_corner[0])
+		# bottom_left_1 = dist.euclidean(mouth_left_corner, mouth_top_center)
+		# bottom_right_1 = dist.euclidean(mouth_right_corner, mouth_top_center)
+		# bottom_left_2 = dist.euclidean(mouth_left_corner, mouth_bottom_center)
+		# bottom_right_2 = dist.euclidean(mouth_right_corner, mouth_bottom_center)
 
-		angle1 = law_of_cosines_three_known_sides(top, bottom_left_1, bottom_right_1)
-		angle2 = law_of_cosines_three_known_sides(top, bottom_left_2, bottom_right_2)
+		# angle1 = law_of_cosines_three_known_sides(top, bottom_left_1, bottom_right_1)
+		# angle2 = law_of_cosines_three_known_sides(top, bottom_left_2, bottom_right_2)
 
-		# A smile is detected when either angle1 is > 7 (subtle smile) or angle2 > 25 (wide smile)
-
-		if draw_detection_info and not executing_screenshot and True:
-			orig = draw_text(orig, "Smile angle (top): {}".format(angle1), (x, y), default_font,
-				30, (0, 255, 0))
-			orig = draw_text(orig, "Smile angle (bottom): {}".format(angle2), (x, y + 50), default_font,
-				30, (0, 255, 0))
-			# orig = draw_text(orig, "Angle: {}".format(angle), (x, y + 50), default_font, 
-			# 		30, (0, 255, 0))
+		# # A smile is detected when either angle1 is > 7 (subtle smile) or angle2 > 25 (wide smile)
+		# if draw_detection_info and not executing_screenshot:
+		# 	orig = draw_text(orig, "Smile angle (top): {}".format(angle1), (x, y), default_font,
+		# 		30, (0, 255, 0))
+		# 	orig = draw_text(orig, "Smile angle (bottom): {}".format(angle2), (x, y + 50), default_font,
+		# 		30, (0, 255, 0))
 		if x > 0 and y > 0:
 			orig = overlay_transparent(orig, overlay, x, y)
 
@@ -383,6 +382,14 @@ while True:
 	# If specified key is pressed while focus is on the window, end the loop
 	key = cv2.waitKey(1) & 0xFF
 
+	# This section of code operates based on key pressed.
+	# Please add to this list when adding new key. 
+	# --- LIST OF HOTKEYS ---
+	# e: To input the email to send screenshots to. To exit input mode, press ENTER key to confirm the email change.
+	# i: Toggle display of extra information on the screen
+	# p: Toggle portrait mode (currently in progress)
+	# q: Exit the program
+
 	# Backspace is 8, Enter is 13, 255 is nothing
 	if entering_email:
 		# If the key is 255, it means no key is pressed
@@ -390,7 +397,7 @@ while True:
 			# Press enter to confirm
 			if key == 13:
 				entering_email = False
-			# Backspace to remove last letter from string
+			# Backspace to remove last character from string
 			elif key == 8:
 				mailer.receiver_email = mailer.receiver_email[:-1]
 			else:
@@ -415,6 +422,5 @@ while True:
 		break # Exit program
 
 # do a bit of cleanup
-vc.release()
 cv2.destroyAllWindows()
-# vs.stop()
+vc.stop()
