@@ -4,8 +4,6 @@ import math
 from PIL import ImageFont, ImageDraw, Image
 import cv2
 
-default_EAR_threshold = 0.16
-
 def rotate_box(bb, cx, cy, h, w):
     new_bb = list(bb)
     for i,coord in enumerate(bb):

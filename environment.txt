@@ -1,23 +1,18 @@
 Python version:
-3.6
+3.6 (installing other versions may break compatibility with certain packages i.e. dlib)
 
 Required packages (all pip installable on Windows 10 UNLESS specified otherwise):
-numpy (latest)
-scipy (latest)
+numpy 1.18.4
+scipy 1.4.1
 dlib 19.8.1 (install via whl file)
-imutils (latest)
-opencv-python (latest)
-playsound (latest)
-python-dotenv (latest)
-Pillow (latest)
+imutils (always install latest)
+opencv-python 4.2.0.34
+playsound 1.2.2
+python-dotenv 0.13.0
+Pillow 7.1.2
 
 Guide for dlib installation on raspberry pi:
 https://www.pyimagesearch.com/2018/01/22/install-dlib-easy-complete-guide/
 
-
-Run the program:
+Run the application:
 python main.py
-
-
-To run the program on Raspberry Pi and use PiCamera, change the USE_PI_CAMERA property to 1.
-Otherwise, switch to 0.

@@ -4,3 +4,5 @@ video
 working_backup
 screenshots
 .env
+*.tmp
+*.docx

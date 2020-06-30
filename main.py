@@ -12,7 +12,6 @@ import cv2
 import dlib
 import imutils
 from playsound import playsound
-from threading import Timer
 import time
 import os
 import math
@@ -23,13 +22,14 @@ from my_utils import overlay_transparent
 from my_utils import eye_aspect_ratio
 from my_utils import rotate_box
 from my_utils import law_of_cosines_three_known_sides
-from my_utils import default_EAR_threshold
 from my_utils import draw_text
 from scipy.spatial import distance as dist
 from dotenv import load_dotenv
 from Mailer import Mailer
 from os import getenv
-import threading
+from threading import Thread
+from threading import Timer
+from datetime import datetime
 from PIL import ImageFont
 
 load_dotenv()
@@ -88,11 +88,45 @@ def prevCategory():
 	category_item_count = getCategoryItemCount(current_category)
 	drawableIndex = 0
 
+message_frames_limit = 20
+message_frames_count = 0
+message_to_show = ''
+show_message = False
+
+# Writes a message on the screen
+def process_message(background):
+	global message_frames_limit, message_frames_count, message_to_show, show_message
+	if message_to_show == '' or show_message is False:
+		return
+
+	if message_frames_count >= message_frames_limit:
+		show_message = False
+	else:
+		(height, width) = background.shape[:2]
+		color = (0, 128, 255)
+		font_size = 30
+		x = 10
+		y = height / 2 - (font_size / 2)
+		new_img = draw_text(background, message_to_show, (x, y), default_font, font_size, color)
+		message_frames_count += 1
+		print(f'Text drawn: {message_to_show}')
+
+	return new_img
+
+def display_message(text):
+	global message_to_show, show_message, message_frames_count
+	message_to_show = text
+	message_frames_count = 0
+	show_message = True
+
+
+
 # Variables for blink detection.
 # Define two constants, one for the eye aspect ratio to indicate a blink
 # and a second constant for the number of consecutive frames
 # the eye must be below the threshold
-EYE_AR_THRESHOLD = default_EAR_threshold # Defined in my_utils.py
+default_EAR_threshold = float(getenv('DEFAULT_EAR_THRESHOLD'))
+EYE_AR_THRESHOLD = default_EAR_threshold
 EYE_AR_CONSEC_FRAMES = 1
 
 # Initialize the frame counters and the total number of blinks
@@ -189,7 +223,7 @@ while True:
 
 		# Check if minimum number of consecutive frames has passed since EAR reached threshold
 		if bothEAR < EYE_AR_THRESHOLD:
-			print('Left EAR: {:.4f}, Right EAR: {:.4f}'.format(leftEAR, rightEAR))
+			# print('Left EAR: {:.4f}, Right EAR: {:.4f}'.format(leftEAR, rightEAR))
 			if currently_closed_eye is not 'both':
 				currently_closed_eye = 'both'
 				frame_counter = 1
@@ -217,11 +251,12 @@ while True:
 					nextCategory()
 				elif currently_closed_eye is 'left':
 					# Set flag to save frame to disk after specified delay
-					executing_screenshot = True
-					elapsed_time = screenshot_delay
+					if not executing_screenshot:
+						executing_screenshot = True
+						elapsed_time = screenshot_delay
 
-					for i in range(1, screenshot_delay + 2):
-						Timer(i, countdown).start()
+						for i in range(1, screenshot_delay + 2):
+							Timer(i, countdown).start()
 
 				elif currently_closed_eye is 'both':
 					if drawableIndex + 1 >= category_item_count:
@@ -344,25 +379,37 @@ while True:
 			font_size = 60
 			orig = draw_text(orig, text, (int(origW/2), (int(origH/2))), font, font_size, color)
 		else:
-			file_name = str(time.time()) + '.png'
-			file_path = '{}/{}'.format(screenshots_folder_name, file_name)
-			cv2.imwrite(file_path, orig)
+			date = datetime.today().strftime('%d-%m-%Y')
+			directory_to_save = f'{screenshots_folder_name}/{date}'
+			# Check if there is directory with the current date as its name
+			if not os.path.isdir(directory_to_save):
+				os.mkdir(directory_to_save)
+
+			date_and_time = datetime.now().strftime('%d-%m-%Y %H.%M')
+			email_suffix = f' {mailer.receiver_email}' if mailer.receiver_email is not '' else ''
+			file_name = f'{date_and_time}{email_suffix}.png'
+			file_path = f'{directory_to_save}/{file_name}'
+			print(file_path)
+			saved = cv2.imwrite(file_path, orig)
+			# print(f'Saved: {saved}')
 			executing_screenshot = False
 			
 			# Indicate screenshot taken
 			playsound('sounds/camera-shutter-click.mp3')
 			cv2.imshow("Blinker", cv2.rectangle(orig, (0, 0), (origW, origH), (255, 255, 255), -1))
 
-			# Send email to specified user
+			# Send email to specified user 
+			# NOTE: CHANGE FILE NAME
 			def wrapper():
 				if mailer.receiver_email is not '':
 					mailer.send("TP Blink n Wink", "Thank you for visiting TP's AI Corner!", [file_path])
-			thread = threading.Thread(target=wrapper)
+			thread = Thread(target=wrapper)
 			thread.start()
 
 	help_text = '''
+c: Clears away the current email that the program is sending screenshots to.
 e: To input the email to send screenshots to. To exit input mode,
-   press ENTER key to confirm the email change.
+    press ENTER key to confirm the email change.
 h: Toggle help screen
 i: Toggle display of extra information on the screen
 p: Toggle portrait mode (currently in progress)
@@ -376,6 +423,21 @@ q: Exit the program
 		orig = cv2.rectangle(orig, (0, 0), (origW, origH), (0, 0, 0), -1)
 		orig = draw_text(orig, help_text, (10, 10), font, font_size, color)
 		
+	# Supposed to be simplified into process_message function, but producing errors so this will do for now.
+	# orig = process_message(orig)
+	if message_to_show == '' or show_message is False:
+		pass
+	else:
+		if message_frames_count >= message_frames_limit:
+			show_message = False
+		else:
+			(height, width) = orig.shape[:2]
+			color = (0, 128, 255)
+			font_size = 30
+			x = 10
+			y = height / 2 - (font_size / 2)
+			orig = draw_text(orig, message_to_show, (x, y), default_font, font_size, color)
+			message_frames_count += 1
 
 	# Show the output frame
 	cv2.imshow("Blinker", orig)
@@ -387,25 +449,35 @@ q: Exit the program
 	# Please add to this list when adding new key.
 	# Also add to help_text above.
 	# --- LIST OF HOTKEYS ---
+	# c: Clears away the current email that the program is sending screenshots to.
 	# e: To input the email to send screenshots to. To exit input mode, press ENTER key to confirm the email change.
 	# h: Toggle help screen
 	# i: Toggle display of extra information on the screen
 	# p: Toggle portrait mode (currently in progress)
 	# q: Exit the program
 
+	# ESC Key pressed
+	if key == 27:
+		show_help = False
+		entering_email = False
 	# Backspace is 8, Enter is 13, 255 is nothing
-	if entering_email:
+	elif entering_email:
 		# If the key is 255, it means no key is pressed
 		if key != 255:
 			# Press enter to confirm
 			if key == 13:
 				entering_email = False
+				display_message(f'Email confirmed: {mailer.receiver_email}')
 			# Backspace to remove last character from string
 			elif key == 8:
 				mailer.receiver_email = mailer.receiver_email[:-1]
 			else:
 				char = chr(key)
 				mailer.receiver_email += char
+	elif key == ord("c"):
+		mailer.receiver_email = ''
+		entering_email = False
+		display_message('Email cleared')
 	elif key == ord("e"):
 		entering_email = True
 	elif key == ord("p"):
@@ -417,8 +489,8 @@ q: Exit the program
 			w = SCREEN_WIDTH_LANDSCAPE
 			h = SCREEN_HEIGHT_LANDSCAPE
 
-		vc.set(cv2.CAP_PROP_FRAME_WIDTH, w)
-		vc.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+		stream.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+		stream.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
 	elif key == ord("i"):
 		draw_detection_info = not draw_detection_info
 	elif key == ord("h"):

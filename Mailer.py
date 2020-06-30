@@ -32,13 +32,16 @@ class Mailer:
 
         if len(attachments_file_names) > 0:
             # Attachments are file names
-            for file_name in attachments_file_names:
-                with open(file_name, "rb") as attachment:
+            for file_path in attachments_file_names:
+                with open(file_path, "rb") as attachment:
                     part = MIMEBase("application", "octet-stream")
                     part.set_payload(attachment.read())
 
                     # Encode file in ASCII characters to send by email
                     encoders.encode_base64(part)
+
+                    file_path_split_parts = file_path.split('/')
+                    file_name = file_path_split_parts[len(file_path_split_parts) - 1]
 
                     # Add header as key/value pair to attachment part
                     part.add_header(

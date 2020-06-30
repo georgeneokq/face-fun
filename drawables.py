@@ -1,23 +1,21 @@
 '''
 This file contains categories of images to be displayed.
 To add categories/images, add them to the 'categorized_drawables' list at the bottom of the file.
-
 '''
-
 
 import cv2
 from scipy.spatial import distance as dist
 from imutils import face_utils
 from my_utils import law_of_cosines_three_known_sides
 from my_utils import eye_aspect_ratio
-from my_utils import default_EAR_threshold
+from dotenv import load_dotenv
+from os import getenv
 
 # face_utils.FACIAL_LANDMARKS_IDXS contains:
 # mouth, inner_mouth, right_eyebrow, left_eyebrow, right_eye, left_eye, nose, jaw
 
-# The only function that should be called from external files!
-# Name is defined in the drawables variable
-# Regions should be a tuple with (startX, startY, endX, endY) of the face
+load_dotenv()
+default_EAR_threshold = float(getenv('DEFAULT_EAR_THRESHOLD'))
 
 def getByCategory(category_name, index, regions, facial_landmarks):
     (startX, startY, endX, endY) = regions
@@ -54,7 +52,6 @@ def getCategory(category_name):
 
 
 def getCategoryItemCount(category_name):
-    print('Category changed. Category: {}, Length: {}'.format(category_name, len(categorized_drawables[category_name])))
     return len(categorized_drawables[category_name])
 
 def getCategoryNames():
@@ -96,6 +93,11 @@ def autoScale(dimension, faceWidth):
 
 
 ################## DEFINE FUNCTIONS TO RETURN COORDINATES AND DIMENSIONS FOR EACH DRAWABLE ##################
+# All function signatures should be the same, with the following parameters:
+# startX, startY (face top-left), endX , endY (face bottom-right), originalWidth, originalHeight (of the image to be drawn),
+# facialLandmarks (list of 68 points of x, y coordinate pairs)
+# 
+# Use any of the parameters above to place the image wherever you desire, around or on the face. 
 # Return (x, y, w, h) tuple, where x and y are top-left coordinates, w and h are dimensions of the image to be drawn
 
 def top_of_head(width=None, height=None, offset_from_face=0):
@@ -220,46 +222,6 @@ scaling_breakpoints = [150, 120, 90, 60]
 
 # Categories and images
 categorized_drawables = {
-    "Emotion": [
-        {
-            "img": get_image_path_by_emotion,
-            "func": top_of_head()
-        }
-    ],
-    "Animal Ears": [
-        {
-            "img": "img/animal_ears/animal_ears1.png",
-            "func": top_of_head(height=100)
-        },
-        {
-            "img": "img/animal_ears/animal_ears2.png",
-            "func": top_of_head(height=100)
-        },
-        {
-            "img": "img/animal_ears/animal_ears3.png",
-            "func": top_of_head(height=200)
-        },
-        {
-            "img": "img/animal_ears/animal_ears4.png",
-            "func": top_of_head(height=150)
-        },
-        {
-            "img": "img/animal_ears/animal_ears5.png",
-            "func": top_of_head(height=150)
-        },
-        {
-            "img": "img/animal_ears/animal_ears6.png",
-            "func": top_of_head(height=150)
-        },
-        {
-            "img": "img/animal_ears/animal_ears7.png",
-            "func": top_of_head(height=150)
-        },
-        {
-            "img": "img/animal_ears/animal_ears8.png",
-            "func": top_of_head(height=150)
-        }
-    ],
     "Eyewear": [
         {
             "img": "img/eyewear/eyewear1.png",
@@ -301,6 +263,40 @@ categorized_drawables = {
             "img": "img/eyewear/eyewear10.png",
             "func": eyes
         },
+    ],
+    "Animal Ears": [
+        {
+            "img": "img/animal_ears/animal_ears1.png",
+            "func": top_of_head(height=100)
+        },
+        {
+            "img": "img/animal_ears/animal_ears2.png",
+            "func": top_of_head(height=100)
+        },
+        {
+            "img": "img/animal_ears/animal_ears3.png",
+            "func": top_of_head(height=200)
+        },
+        {
+            "img": "img/animal_ears/animal_ears4.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears5.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears6.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears7.png",
+            "func": top_of_head(height=150)
+        },
+        {
+            "img": "img/animal_ears/animal_ears8.png",
+            "func": top_of_head(height=150)
+        }
     ],
     "Hats": [
         {
@@ -376,6 +372,12 @@ categorized_drawables = {
         {
             "img": "img/anime/anime10.png",
             "func": top_of_head()
-        },
+        }
+    ],
+    "Emotion": [
+        {
+            "img": get_image_path_by_emotion,
+            "func": top_of_head()
+        }
     ]
 }
